@@ -11,7 +11,10 @@ function blueprint(name, input) {
   const tokens = __tokenize(input);
   const formatedInput = __format(input, tokens);
   const treeRoot = __tree(tokens, formatedInput);
-  console.log(tokens);
+
+  this.blueprints[name] = {
+    treeRoot
+  }
 }
 
 /**
@@ -58,7 +61,7 @@ function __token(tString, tsPos, tePos) {
   if (this.type === TYPE.LIST) {
     this.items = [];
   } else if (this.type === TYPE.DICT) {
-    this.props = {};
+    this.props = []; //{};
   }
 
   if (
@@ -97,7 +100,7 @@ function __tree(tokens, formatedInput) {
     }
 
     if (activeParent.type === TYPE.DICT) {
-      activeParent.props[activeToken.name] = activeToken;
+      activeParent.props.push(activeToken);
     } else {
       activeParent.items.push(activeToken);
       // pathIndex[pathIndex.length - 1]++;
@@ -207,10 +210,75 @@ function __attachSelector($, token, parentToken) {
   token.path = path;
 }
 
+/**
+ * extracts values from input string based on the pattern;
+ * @param {String} name 
+ * @param {String} input 
+ */
+function extract(name, input) {
+  const $ = cheerio.load(input);
+  const blueprint = this.blueprints[name];
+  if (!blueprint) throw "blueprint not founded";
+  const treePath = [];
+  const indexPath = [];
+  const resultPath = [];
+  const nodePath = [];
+  let parentToken = null;
+  let activeToken = blueprint.treeRoot;
+  let activeResult = null;
+  let activeNode = $("html")[0];
+  while(true) {
+    if (activeToken.type === TYPE.DICT) {
+      treePath.push(activeToken);
+      indexPath.push(0);
+      nodePath.push(activeNode);
+      parentToken = activeToken;
+      activeToken = parentToken.props[0];
+      activeNode = __findNode(activeToken.path, activeNode);
+      activeResult = {};
+      resultPath.push(activeResult);
+    } else if (activeToken.type === TYPE.LIST) {
+      treePath.push(activeToken);
+      indexPath.push(0);
+      nodePath.push(activeNode);
+      parentToken = activeToken;
+      activeToken = parentToken.items[0];
+      activeNode = __findNode(activeToken.path, activeNode);
+      activeResult = [];
+      resultPath.push(activeResult);
+    } else {
+      // console.log(activeToken);
+    }
+  }
+}
+
+function __findNode(path, parentNode) {
+  let activeNode = parentNode;
+
+  // TODO should add some flags to check that element founded or not 
+  // because at this point when if desired node not founded it doesn't
+  // throws any error;
+  for (const {sign, index} of path) {
+    if (index) {
+      activeNode = activeNode.children[index];
+    } else {
+      for (const child of activeNode.children) {
+        if (child.name === sign) {
+          activeNode = child;
+          break;
+        }
+      }
+    }
+  }
+  
+  return activeNode;
+}
+
 function schemee() {
   this.blueprints = {};
 
   this.blueprint = blueprint;
+  this.extract = extract;
 }
 
 module.exports = () => {
