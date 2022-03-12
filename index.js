@@ -2,6 +2,7 @@ const cheerio = require("cheerio");
 const cheerioGetUniqueSelector = require('cheerio-get-css-selector');
 const helpers = require("./helpers");
 const { SYMBOL, TYPE } = require("./config");
+const { last } = require("cheerio/lib/api/traversing");
 /**
  * scans the input and makes token from them;
  * @param {String} name 
@@ -61,7 +62,7 @@ function __token(tString, tsPos, tePos) {
   if (this.type === TYPE.LIST) {
     this.items = [];
   } else if (this.type === TYPE.DICT) {
-    this.props = []; //{};
+    this.items = []; //{};
   }
 
   if (
@@ -100,7 +101,7 @@ function __tree(tokens, formatedInput) {
     }
 
     if (activeParent.type === TYPE.DICT) {
-      activeParent.props.push(activeToken);
+      activeParent.items.push(activeToken);
     } else {
       activeParent.items.push(activeToken);
       // pathIndex[pathIndex.length - 1]++;
@@ -215,41 +216,86 @@ function __attachSelector($, token, parentToken) {
  * @param {String} name 
  * @param {String} input 
  */
+
 function extract(name, input) {
   const $ = cheerio.load(input);
   const blueprint = this.blueprints[name];
   if (!blueprint) throw "blueprint not founded";
-  const treePath = [];
-  const indexPath = [];
-  const resultPath = [];
-  const nodePath = [];
-  let parentToken = null;
-  let activeToken = blueprint.treeRoot;
-  let activeResult = null;
-  let activeNode = $("html")[0];
+  const path = [];
+  const rootPathNode = __pathNode(
+    blueprint.treeRoot,
+    $("html").get(0)
+  );
+  __pathForward(path, rootPathNode);
+
   while(true) {
-    if (activeToken.type === TYPE.DICT) {
-      treePath.push(activeToken);
-      indexPath.push(0);
-      nodePath.push(activeNode);
-      parentToken = activeToken;
-      activeToken = parentToken.props[0];
-      activeNode = __findNode(activeToken.path, activeNode);
-      activeResult = {};
-      resultPath.push(activeResult);
-    } else if (activeToken.type === TYPE.LIST) {
-      treePath.push(activeToken);
-      indexPath.push(0);
-      nodePath.push(activeNode);
-      parentToken = activeToken;
-      activeToken = parentToken.items[0];
-      activeNode = __findNode(activeToken.path, activeNode);
-      activeResult = [];
-      resultPath.push(activeResult);
+    const lastPath = __elemAt(path, -1);
+    if (!lastPath) break;
+    if (lastPath.token.type === TYPE.VALUE) {
+      const prevPath = __elemAt(path, -2);
+      if (!prevPath) throw "prevPath is not defined!";
+      prevPath.result[lastPath.token.name] = __text(lastPath.node);
+      __pathBackward(path);
     } else {
-      // console.log(activeToken);
+      if (lastPath.token.type === TYPE.DICT) {
+          const nextToken = __getNextItem(lastPath);
+          if (!nextToken) {
+            __pathBackward(path);
+            continue;
+          }
+
+        __pathForward(path, __pathNode(
+          nextToken,
+          __findNode(nextToken.path, lastPath.node),
+          lastPath
+        ));
+      }
     }
   }
+
+  console.log(rootPathNode)
+}
+
+function __pathForward(path, pathNode) {
+  path.push(pathNode);
+}
+
+function __pathBackward(path) {
+  return path.pop();
+} 
+
+function __getNextItem(pathNode) {
+  return pathNode.token.items[pathNode.cursor++];
+}
+
+function __elemAt(arr, i) {
+  if (i < 0) return arr[arr.length + i];
+  return arr[i];
+}
+
+function __pathNode(token, node, prevPathNode) {
+  if (!node) throw "node is undefined!";
+  let pathNode = {
+    token, 
+    node,
+    index: 0
+  }
+
+  if (token.type !== TYPE.VALUE) {
+    const result = token.type === TYPE.LIST ? [] : {};
+    if (prevPathNode) {
+      if (prevPathNode.token.type === TYPE.DICT) {
+        prevPathNode.result[token.name] = result;
+      }
+    }
+    pathNode = {
+      ...pathNode, 
+      result,
+      cursor: 0,
+    }
+  }
+
+  return pathNode;
 }
 
 function __findNode(path, parentNode) {
@@ -272,6 +318,17 @@ function __findNode(path, parentNode) {
   }
   
   return activeNode;
+}
+
+/**
+ * get text of the node with type text;
+ * at this point just childrens will checked;
+ * @param {Node} node 
+ */
+function __text(node) {
+  return node.children.reduce((acc, cur) => {
+    return cur.type === "text" ? acc + cur.data : acc
+  }, "");
 }
 
 function schemee() {
