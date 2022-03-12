@@ -12,7 +12,6 @@ function blueprint(name, input) {
   const tokens = __tokenize(input);
   const formatedInput = __format(input, tokens);
   const treeRoot = __tree(tokens, formatedInput);
-
   this.blueprints[name] = {
     treeRoot
   }
@@ -232,9 +231,10 @@ function extract(name, input) {
     const lastPath = __elemAt(path, -1);
     if (!lastPath) break;
     if (lastPath.token.type === TYPE.VALUE) {
+      console.log("here", lastPath.token.name)
       const prevPath = __elemAt(path, -2);
       if (!prevPath) throw "prevPath is not defined!";
-      prevPath.result[lastPath.token.name] = __text(lastPath.node);
+      __addValue(prevPath, lastPath, __text(lastPath.node));
       __pathBackward(path);
     } else {
       if (lastPath.token.type === TYPE.DICT) {
@@ -249,11 +249,55 @@ function extract(name, input) {
           __findNode(nextToken.path, lastPath.node),
           lastPath
         ));
+      } else {
+        let nextToken = __getNextItem(lastPath);
+        if (!nextToken) {
+          const nextNode = __getNextNode(lastPath.prevNode);
+          if (!nextNode) {
+            __pathBackward(path);
+            continue;
+          }
+
+          lastPath.prevNode = nextNode;
+          nextToken = __getFirstItem(lastPath);
+          __pathForward(path, __pathNode(
+            nextToken,
+            nextNode,
+            lastPath
+          ));
+        }
+
+        const nextNode = __findNode(nextToken.path, lastPath.node);
+        lastPath.prevNode = nextNode;
+        __pathForward(path, __pathNode(
+          nextToken,
+          nextNode,
+          lastPath
+        ));
       }
     }
   }
 
   console.log(rootPathNode)
+}
+
+function __getNextNode(prevNode) {
+  return prevNode.next;
+}
+
+function __addValue(prevPathNode, lastPathNode, value) {
+  if (prevPathNode.token.type === TYPE.DICT) {
+    prevPathNode.result[lastPathNode.token.name] = value;
+  } else {
+    let lastElement = __elemAt(prevPathNode, -1);
+    console.log(lastElement,prevPathNode.token.name , prevPathNode.result, "dani")
+    if (!lastElement) {
+      lastElement = {};
+      prevPathNode.result.push(lastElement);
+    }
+
+    lastElement[lastPathNode.token.name] = value;
+  }
 }
 
 function __pathForward(path, pathNode) {
@@ -266,6 +310,11 @@ function __pathBackward(path) {
 
 function __getNextItem(pathNode) {
   return pathNode.token.items[pathNode.cursor++];
+}
+
+function __getFirstItem(pathNode) {
+  pathNode.cursor = 0;
+  return pathNode.token.items[pathNode.cursor];
 }
 
 function __elemAt(arr, i) {
@@ -286,12 +335,21 @@ function __pathNode(token, node, prevPathNode) {
     if (prevPathNode) {
       if (prevPathNode.token.type === TYPE.DICT) {
         prevPathNode.result[token.name] = result;
+      } else {
+        prevPathNode.result.push(result);
       }
     }
     pathNode = {
       ...pathNode, 
       result,
       cursor: 0,
+    }
+
+    if (token.type !== TYPE.LIST) {
+      pathNode = {
+        ...pathNode, 
+        prevNode: null
+      }
     }
   }
 
