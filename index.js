@@ -229,9 +229,11 @@ function extract(name, input) {
 
   while(true) {
     const lastPath = __elemAt(path, -1);
+    // console.log(">>>turn", lastPath.token.name);
     if (!lastPath) break;
+    ////("here", lastPath.token.name)
     if (lastPath.token.type === TYPE.VALUE) {
-      console.log("here", lastPath.token.name)
+      console.log(">> at value", lastPath.node.attribs)
       const prevPath = __elemAt(path, -2);
       if (!prevPath) throw "prevPath is not defined!";
       __addValue(prevPath, lastPath, __text(lastPath.node));
@@ -252,12 +254,14 @@ function extract(name, input) {
       } else {
         let nextToken = __getNextItem(lastPath);
         if (!nextToken) {
+          console.log(":::", lastPath)
           const nextNode = __getNextNode(lastPath.prevNode);
           if (!nextNode) {
+            console.log("**")
             __pathBackward(path);
             continue;
           }
-
+          console.log("nextNode: ", nextNode.attribs)
           lastPath.prevNode = nextNode;
           nextToken = __getFirstItem(lastPath);
           __pathForward(path, __pathNode(
@@ -265,8 +269,9 @@ function extract(name, input) {
             nextNode,
             lastPath
           ));
+          continue;
         }
-
+        console.log(lastPath.node.type, lastPath.node.name, nextToken.name);
         const nextNode = __findNode(nextToken.path, lastPath.node);
         lastPath.prevNode = nextNode;
         __pathForward(path, __pathNode(
@@ -278,11 +283,15 @@ function extract(name, input) {
     }
   }
 
-  console.log(rootPathNode)
+  console.log(rootPathNode.result.product)
 }
 
 function __getNextNode(prevNode) {
-  return prevNode.next;
+  let resNode = prevNode.next;
+  while(resNode && resNode.type === "text") {
+    resNode = resNode.next;
+  }
+  return resNode;
 }
 
 function __addValue(prevPathNode, lastPathNode, value) {
@@ -290,7 +299,7 @@ function __addValue(prevPathNode, lastPathNode, value) {
     prevPathNode.result[lastPathNode.token.name] = value;
   } else {
     let lastElement = __elemAt(prevPathNode, -1);
-    console.log(lastElement,prevPathNode.token.name , prevPathNode.result, "dani")
+    ////(lastElement,prevPathNode.token, "dony" , prevPathNode.token, "dani")
     if (!lastElement) {
       lastElement = {};
       prevPathNode.result.push(lastElement);
@@ -305,16 +314,18 @@ function __pathForward(path, pathNode) {
 }
 
 function __pathBackward(path) {
+  ////("path backward", path[path.length - 1]);
   return path.pop();
 } 
 
 function __getNextItem(pathNode) {
+  console.log(pathNode.cursor)
   return pathNode.token.items[pathNode.cursor++];
 }
 
 function __getFirstItem(pathNode) {
-  pathNode.cursor = 0;
-  return pathNode.token.items[pathNode.cursor];
+  pathNode.cursor = 1;
+  return pathNode.token.items[0];
 }
 
 function __elemAt(arr, i) {
@@ -374,7 +385,7 @@ function __findNode(path, parentNode) {
       }
     }
   }
-  
+  console.log(":>", activeNode.type, activeNode.name);
   return activeNode;
 }
 
@@ -384,6 +395,7 @@ function __findNode(path, parentNode) {
  * @param {Node} node 
  */
 function __text(node) {
+  if (!node.children) return "";
   return node.children.reduce((acc, cur) => {
     return cur.type === "text" ? acc + cur.data : acc
   }, "");
